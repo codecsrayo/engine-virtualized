@@ -70,6 +70,14 @@ public abstract class AppUtils {
     }
 
     public static void restartApplication(Context context, int selectedMenuItemId) {
+        // Kiosk: the launcher activity starts the game, so "restart to the UI" would relaunch it.
+        // Leaving the game closes the app instead.
+        if (com.winlator.star.BuildConfig.KIOSK) {
+            android.app.ActivityManager am = (android.app.ActivityManager)context.getSystemService(Context.ACTIVITY_SERVICE);
+            if (am != null) for (android.app.ActivityManager.AppTask task : am.getAppTasks()) task.finishAndRemoveTask();
+            Runtime.getRuntime().exit(0);
+            return;
+        }
         Intent intent = context.getPackageManager().getLaunchIntentForPackage(context.getPackageName());
         Intent mainIntent = Intent.makeRestartActivityTask(intent.getComponent());
         if (selectedMenuItemId > 0) mainIntent.putExtra("selected_menu_item_id", selectedMenuItemId);

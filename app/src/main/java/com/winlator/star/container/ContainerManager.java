@@ -183,6 +183,11 @@ public class ContainerManager {
         });
     }
 
+    /** Blocking variant for callers already on a worker thread (kiosk first-run setup). */
+    public Container createContainerSync(JSONObject data, ContentsManager contentsManager) {
+        return createContainer(data, contentsManager);
+    }
+
     public void duplicateContainerAsync(Container container, Callback<Container> callback) {
         final Handler handler = new Handler();
         Executors.newSingleThreadExecutor().execute(() -> {

@@ -123,6 +123,7 @@ class MainActivity : AppCompatActivity() {
     // frame. Not held for the imagefs install — that has its own in-app SplashScreen surface.
     @Volatile
     private var contentReady = false
+    private var kioskBootstrap: com.winlator.star.kiosk.KioskBootstrap? = null
 
     private val showAllFilesDialog = mutableStateOf(false)
     private val showAboutDialog = mutableStateOf(false)
@@ -176,6 +177,15 @@ class MainActivity : AppCompatActivity() {
 
         PACKAGE_NAME = applicationContext.packageName
         AppThemeState.init(this)
+
+        if (BuildConfig.KIOSK) {
+            contentReady = true
+            val bootstrap = com.winlator.star.kiosk.KioskBootstrap(this)
+            kioskBootstrap = bootstrap
+            setContent { WinlatorTheme { com.winlator.star.kiosk.KioskScreen(bootstrap) } }
+            bootstrap.run()
+            return
+        }
         // Apply the user's App-orientation preference to THIS app-UI activity only (the game's
         // XServerDisplayActivity manages its own orientation and is unaffected).
         com.winlator.star.core.AppOrientation.apply(this)
@@ -437,6 +447,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        kioskBootstrap?.let { it.run(); return }
         controllerTestPaused = false
         // A game may still be playing on the TV. Tapping the launcher brings THIS task forward — the
         // companion screen is in a task of its own, deliberately, so the system has no reason to prefer

@@ -54,8 +54,34 @@ tasks.register("downloadImageFS") {
     }
 }
 
+// Kiosk flavor "joey": Proton 11.0-2 arm64ec (Bannerlator's default arm64ec layer) bundled so the
+// first run needs no network. The game's 32-bit x86 code then runs through WowBox64, which draws the
+// 1708x768 frames fast enough; Wine 10 x86_64 (Box64 WoW64) managed ~10-13 FPS. Pinned to the
+// Bannerlator author's own release + sha256, same scheme as imagefs above.
+tasks.register("downloadKioskWine") {
+    File wcp = new File(project.projectDir, ["src","joey","assets","kiosk","proton-11.0-2-arm64ec.wcp"].join(File.separator))
+    String wcpURL = "https://github.com/The412Banner/winlator-contents/releases/download/bionic-layers-20261007-v14/proton-11.0-2-arm64ec.wcp"
+    String wcpSha256 = "f73ef59e421c40f429e2d7fa66c606a929dc837601dc68d80d1aa43700dd8292"
+
+    doLast {
+        if (!wcp.exists()) {
+            wcp.parentFile.mkdirs()
+            println("Kiosk Wine layer not present, downloading...")
+            new URL(wcpURL).withInputStream { i -> wcp.withOutputStream { it << i } }
+            def digest = java.security.MessageDigest.getInstance("SHA-256")
+            wcp.eachByte(1024 * 1024) { buf, len -> digest.update(buf, 0, len) }
+            def actual = digest.digest().encodeHex().toString()
+            if (actual != wcpSha256) {
+                wcp.delete()
+                throw new GradleException("proton-11.0-2-arm64ec.wcp checksum mismatch: expected ${wcpSha256}, got ${actual}")
+            }
+        }
+    }
+}
+
 tasks.register("prepareKotlinBuildScriptModel"){}
 preBuild.dependsOn(downloadImageFS)
+tasks.configureEach { t -> if (t.name == "preJoeyDebugBuild" || t.name == "preJoeyReleaseBuild") t.dependsOn(downloadKioskWine) }
 
 android {
     namespace 'com.winlator.star'
@@ -74,6 +100,7 @@ android {
         versionCode 94
         versionName "3.1.5"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField "boolean", "KIOSK", "false"
 
         externalNativeBuild {
             cmake {
@@ -118,6 +145,29 @@ android {
             enableV2Signing = true
             enableV3Signing = true
         }
+        // Personal key for the "joey" kiosk flavor, read from keystore/joey-signing.properties
+        // (storeFile, storePassword, keyAlias, keyPassword). Neither file is in the repository: anyone
+        // holding the key could ship an "update" that inherits the app's data and All-files access.
+        // Without it the joey variants keep the AOSP testkey (see androidComponents below).
+        joey {
+            def props = new Properties()
+            def propsFile = rootProject.file("keystore/joey-signing.properties")
+            if (propsFile.isFile()) propsFile.withInputStream { props.load(it) }
+            if (props.getProperty("storeFile")) {
+                storeFile rootProject.file(props.getProperty("storeFile"))
+                storeType "PKCS12"
+                storePassword props.getProperty("storePassword")
+                keyAlias props.getProperty("keyAlias")
+                keyPassword props.getProperty("keyPassword")
+            }
+            enableV1Signing = true
+            enableV2Signing = true
+            enableV3Signing = true
+        }
+    }
+
+    androidResources {
+        noCompress 'wcp'
     }
 
     buildTypes {
@@ -156,6 +206,13 @@ android {
             applicationId "com.ludashi.benchmark"
             resValue "string", "app_name", "Bannerlator Bionic Ludashi"
         }
+        joey {
+            dimension "version"
+            applicationId "com.laste.yugiohjoey"
+            versionNameSuffix "-joey"
+            resValue "string", "app_name", "Yu-Gi-Oh! Joey"
+            buildConfigField "boolean", "KIOSK", "true"
+        }
         pubg {
             dimension "version"
             applicationId "com.tencent.ig"
@@ -178,6 +235,14 @@ android {
             // build (or another prebuilt) ever emits its own copy, so packaging never fails on a dup.
             pickFirsts += ['**/libc++_shared.so']
         }
+    }
+}
+
+// The buildTypes pin the AOSP testkey, and a buildType's signingConfig beats a flavor's: re-point
+// the joey variants at their own key here.
+androidComponents {
+    onVariants(selector().withFlavor(new kotlin.Pair("version", "joey"))) { variant ->
+        if (android.signingConfigs.joey.storeFile != null) variant.signingConfig.setConfig(android.signingConfigs.joey)
     }
 }
 
