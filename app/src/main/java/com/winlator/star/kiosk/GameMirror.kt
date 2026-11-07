@@ -14,8 +14,8 @@ import java.util.Locale
  * Shared storage (/sdcard) is served by MediaProvider over FUSE; the game reads Data.dat in many
  * small chunks, and on the phone entering the deck screen took ~30 s with MediaProvider at 70-97%
  * CPU (instant on PC). The mirror lives in the app's files dir (ext4, no FUSE) and Wine sees it as
- * E:. The user keeps patching the copies in Download/YGO_Joey_HD; a file is re-copied whenever its
- * size or mtime differs.
+ * E:. The user keeps patching the copies in the game's folder (Android/data/<package>/files/Joey…);
+ * a file is re-copied whenever its size or mtime differs.
  *
  * Saves never move: system.dat lives in the Common folder (CommonDir in the registry, pinned to D:
  * by [PlayerIdSync.apply]), and Deck.ydc in the mirror is a symlink to the one in Download. Should
@@ -24,24 +24,55 @@ import java.util.Locale
  */
 object GameMirror {
     private const val TAG = "KioskMirror"
-    private val READ_ONLY = listOf("YGO_Lanzador.exe", "Joey_Pc.exe", "Data.dat", "Voice.dat", "Region.dat")
     const val DECK = "Deck.ydc"
+    // Never mirrored: the deck is linked (see linkDeck), the rest belongs to the folder.
+    private val NOT_MIRRORED = setOf(DECK.lowercase(), "kiosk.ini")
 
-    /** Copies changed read-only files from [src] to [dst]; [onCopy] is told which file is being copied. */
-    fun sync(src: File, dst: File, onCopy: (String) -> Unit) {
+    /**
+     * Copies changed read-only files from [src] to [dst]: the ones in [names], or, when null, every
+     * file under [src] (subfolders too) but the deck, kiosk.ini and logs. [onCopy] is told which file
+     * is being copied.
+     */
+    fun sync(src: File, dst: File, names: List<String>?, onCopy: (String) -> Unit) {
         dst.mkdirs()
-        for (name in READ_ONLY) {
-            val from = findIgnoreCase(src, name) ?: continue
-            val to = File(dst, from.name)
-            if (to.isFile && to.length() == from.length() && to.lastModified() == from.lastModified()) continue
-            onCopy(from.name)
-            val tmp = File(dst, from.name + ".tmp")
-            from.inputStream().use { input -> tmp.outputStream().use { input.copyTo(it, 1 shl 20) } }
-            check(tmp.length() == from.length()) { "copia incompleta de ${from.name}" }
-            tmp.setLastModified(from.lastModified())
-            check(tmp.renameTo(to)) { "no se pudo colocar ${from.name}" }
-            Log.i(TAG, "mirrored ${from.name} (${from.length()} bytes)")
+        for (from in stale(src, dst, names)) {
+            val rel = from.relativeTo(src).path
+            val to = File(dst, rel)
+            onCopy(rel)
+            copyFile(from, to)
+            Log.i(TAG, "mirrored $rel (${from.length()} bytes)")
         }
+    }
+
+    /**
+     * Bytes [sync] needs free: the new or changed files in full, since each goes through a temp
+     * file while the old copy is still there.
+     */
+    fun bytesToSync(src: File, dst: File, names: List<String>?): Long = stale(src, dst, names).sumOf { it.length() }
+
+    /** Files of [src] whose copy in [dst] is missing or differs in size or mtime. */
+    private fun stale(src: File, dst: File, names: List<String>?): List<File> {
+        val files = if (names != null) names.mapNotNull { findIgnoreCase(src, it) }
+            else src.walkTopDown().filter { it.isFile && isMirrored(it.name) }.toList()
+        return files.filter { from ->
+            val to = File(dst, from.relativeTo(src).path)
+            !(to.isFile && to.length() == from.length() && to.lastModified() == from.lastModified())
+        }
+    }
+
+    private fun isMirrored(name: String): Boolean {
+        val n = name.lowercase()
+        return n !in NOT_MIRRORED && n != IsoImporter.INSTALLING_MARK && !n.endsWith(".log") && !n.endsWith(".tmp") && !n.endsWith(".new")
+    }
+
+    /** Copies [from] to [to] through a temp file, keeping mtime; for the bundled launcher and imports. */
+    fun copyFile(from: File, to: File) {
+        to.parentFile?.mkdirs()
+        val tmp = File(to.parentFile, to.name + ".tmp")
+        from.inputStream().use { input -> tmp.outputStream().use { input.copyTo(it, 1 shl 20) } }
+        check(tmp.length() == from.length()) { "copia incompleta de ${from.name}" }
+        tmp.setLastModified(from.lastModified())
+        check(tmp.renameTo(to)) { "no se pudo colocar ${to.name}" }
     }
 
     /**

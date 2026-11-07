@@ -35,8 +35,9 @@ app/src/main/assets/linuxfs/libblsession.so
 app/src/main/assets/linuxfs/usr/local/bin/
 art*/
 
-# joey flavor: downloaded at build time (sha256-pinned in app/build.gradle)
-/app/src/joey/assets/kiosk/*.wcp
-# joey flavor: personal signing key + its passwords stay local
+# engine flavor: downloaded at build time (sha256-pinned in app/build.gradle)
+/app/src/engine/assets/kiosk/*.wcp
+# engine flavor: personal signing key + its passwords stay local
 /keystore/joey-debug.p12
 /keystore/joey-signing.properties
+/keystore/engine-signing.properties

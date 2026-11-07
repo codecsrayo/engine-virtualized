@@ -10,7 +10,7 @@ import java.util.Properties
 
 /**
  * Settings re-applied on every launch, tunable without a rebuild through an optional `kiosk.ini`
- * next to the game (Download/YGO_Joey_HD/kiosk.ini), e.g.
+ * in each game's folder (Android/data/<package>/files/<Joey|Yugi|Kaiba>/kiosk.ini), e.g.
  *
  *     box64Preset=PERFORMANCE     # STABILITY | COMPATIBILITY | INTERMEDIATE | PERFORMANCE
  *     cpuList=4,5,6,7             # cores Wine may use; empty = all
@@ -19,7 +19,9 @@ import java.util.Properties
  *     emulator=FEXCore            # arm64ec layers only: FEXCore | Box64 (= WowBox64)
  *     wine=Proton-11.0-2-arm64ec-14                       # other Wine layer, own container
  *     wineWcp=/sdcard/Download/YGO_kiosk/proton-11.0-2-arm64ec.wcp
- *     launch=direct               # Joey_Pc.exe -Lspa without YGO_Lanzador.exe
+ *     launch=direct               # Joey: Joey_Pc.exe -Lspa without YGO_Lanzador.exe (Yugi/Kaiba always)
+ *     args=-Lspa                  # game arguments when launched directly
+ *     screenSize=800x600          # this game's desktop size (default: GameProfile.screenSize)
  *     extra.renderer=surfaceflinger   # any shortcut [Extra Data] key; empty value removes it
  *
  * Defaults: the game renders every frame on the CPU (GDI DIB blits, no DirectX) in x86 code under

@@ -58,10 +58,11 @@ object PlayerIdSync {
     }
 
     /**
-     * Writes flcrc, CommonDir (and, when the game is launched without YGO_Lanzador.exe, InstallDirJ)
-     * into the container's system.reg. Run only while the container's wineserver is down.
+     * Writes flcrc, CommonDir (and, when the game is launched without YGO_Lanzador.exe, its
+     * [installDirKey], e.g. InstallDirJ) into the container's system.reg. The three games share the
+     * key, so one player ID serves them all. Run only while the container's wineserver is down.
      */
-    fun apply(container: Container, id: ByteArray?, installDir: String? = null) {
+    fun apply(container: Container, id: ByteArray?, installDirKey: String, installDir: String?, commonDir: String) {
         // Known answer from a real PC install (VirtualStore flcrc of a working save); a wrong value
         // here would make the game reset the saves, so refuse rather than guess.
         check(encrypt(hex("0100d800fd72c56a")).contentEquals(hex("82ed564501002000800b142f2a"))) {
@@ -70,11 +71,11 @@ object PlayerIdSync {
         WineRegistryEditor(File(container.rootDir, ".wine/system.reg")).use { reg ->
             reg.setCreateKeyIfNotExist(true)
             if (id != null) reg.setHexValue(KEY, "flcrc", encrypt(id))
-            if (installDir != null) reg.setStringValue(KEY, "InstallDirJ", installDir)
+            if (installDir != null) reg.setStringValue(KEY, installDirKey, installDir)
             // The game uses CommonDir as-is when present and only derives it from InstallDirJ when it
-            // is missing (joey_pc.exe 0x410bfa). Pin it to Download so system.dat never follows the
-            // install dir into the internal mirror.
-            reg.setStringValue(KEY, "CommonDir", KioskConfig.COMMON_DIR_DOS)
+            // is missing (joey_pc.exe 0x410bfa). Pin it to the data folder so system.dat never follows
+            // the install dir into the internal mirror.
+            reg.setStringValue(KEY, "CommonDir", commonDir)
         }
     }
 }
